@@ -35,9 +35,10 @@ IPScope 是一个基于 FastAPI、GeoLite2 和 GeoCN 的轻量级 IP 地理位�
 
 | 文件 | 下载地址 |
 | --- | --- |
-| GeoLite2-City.mmdb | https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb |
-| GeoLite2-ASN.mmdb | https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb |
-| GeoCN.mmdb | https://github.com/ljxi/GeoCN/releases/download/Latest/GeoCN.mmdb |
+| GeoLite2-Country.mmdb | https://git.io/GeoLite2-Country.mmdb |
+| GeoLite2-City.mmdb | https://git.io/GeoLite2-City.mmdb |
+| GeoLite2-ASN.mmdb | https://git.io/GeoLite2-ASN.mmdb |
+| GeoCN.mmdb | https://github.com/ljxi/GeoCN/releases/latest/download/GeoCN.mmdb |
 
 Docker 部署会通过 `update_and_restart.sh` 自动下载并每 7 天检查更新一次。本地运行时需要手动下载，或自行执行该脚本。
 
