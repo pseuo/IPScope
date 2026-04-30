@@ -14,11 +14,11 @@ retry_later() {
 
 while true; do
     date
-    download_db "GeoLite2-City.mmdb" "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" || { retry_later "Failed to update GeoLite2-City.mmdb"; continue; }
+    download_db "GeoLite2-City.mmdb" "https://git.io/GeoLite2-City.mmdb" || { retry_later "Failed to update GeoLite2-City.mmdb"; continue; }
     
-    download_db "GeoLite2-ASN.mmdb" "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb" || { retry_later "Failed to update GeoLite2-ASN.mmdb"; continue; }
+    download_db "GeoLite2-ASN.mmdb" "https://git.io/GeoLite2-ASN.mmdb" || { retry_later "Failed to update GeoLite2-ASN.mmdb"; continue; }
     
-    download_db "GeoCN.mmdb" "https://github.com/ljxi/GeoCN/releases/download/Latest/GeoCN.mmdb" || { retry_later "Failed to update GeoCN.mmdb"; continue; }
+    download_db "GeoCN.mmdb" "https://github.com/ljxi/GeoCN/releases/latest/download/GeoCN.mmdb" || { retry_later "Failed to update GeoCN.mmdb"; continue; }
 
     echo "Attempting to restart uvicorn..."
     pkill -f "uvicorn"
