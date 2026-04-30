@@ -7,7 +7,7 @@ import sys
 import os
 import argparse
 from logging.handlers import RotatingFileHandler
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
 
 LOG_FILE = os.getenv('LOG_FILE', os.path.join('/code', 'ip_query.log'))
 GEOIP_CITY_DB = os.getenv('GEOIP_CITY_DB', 'GeoLite2-City.mmdb')
@@ -88,10 +88,11 @@ def get_as_info(number):
         return r
 
 def get_des(d):
+    names = d.get('names', {})
     for i in lang:
-        if i in d['names']:
-            return d['names'][i]
-    return d['names']['en']
+        if i in names:
+            return names[i]
+    return names.get('en', '')
 
 def get_country(d):
     r = get_des(d)
@@ -131,11 +132,17 @@ def get_maxmind(ip: str):
         country_name = ''
         asn_info = asn_reader.get(ip)
         if asn_info:
-            as_ = {"number": asn_info["autonomous_system_number"], "name": asn_info["autonomous_system_organization"]}
-            info = get_as_info(as_["number"])
+            as_number = asn_info.get("autonomous_system_number")
+            as_ = {}
+            if as_number is not None:
+                as_["number"] = as_number
+            if asn_info.get("autonomous_system_organization"):
+                as_["name"] = asn_info["autonomous_system_organization"]
+            info = get_as_info(as_number)
             if info:
                 as_["info"] = info
-            ret["as"] = as_
+            if as_:
+                ret["as"] = as_
 
         city_info, prefix = city_reader.get_with_prefix_len(ip)
         ret["addr"] = get_addr(ip, prefix)
@@ -150,12 +157,12 @@ def get_maxmind(ip: str):
             }
         
         if "country" in city_info:
-            country_code = city_info["country"]["iso_code"]
+            country_code = city_info["country"].get("iso_code")
             country_name = get_country(city_info["country"])
             ret["country"] = {"code": country_code, "name": country_name}
         
         if "registered_country" in city_info:
-            registered_country_code = city_info["registered_country"]["iso_code"]
+            registered_country_code = city_info["registered_country"].get("iso_code")
             ret["registered_country"] = {"code": registered_country_code, "name": get_country(city_info["registered_country"])}
             
         regions = [get_des(i) for i in city_info.get('subdivisions', [])]
@@ -180,15 +187,20 @@ def get_cn(ip: str, info=None):
     if not ret:
         return
     info["addr"] = get_addr(ip, prefix)
-    regions = de_duplicate([ret["province"], ret["city"], ret["districts"]])
+    province = ret.get("province", "")
+    city = ret.get("city", "")
+    districts = ret.get("districts", "")
+    regions = de_duplicate([province, city, districts])
     if regions:
         info["regions"] = regions
-        info["regions_short"] = de_duplicate([province_match(ret["province"]), ret["city"].replace('市', ''), ret["districts"]])
-    if "as" not in info:
-        info["as"] = {}
-    info["as"]["info"] = ret['isp']
-    if ret['net']:
-        info["type"] = ret['net']
+        info["regions_short"] = de_duplicate([province_match(province), city.replace('市', ''), districts])
+    if ret.get('isp'):
+        if "as" not in info:
+            info["as"] = {}
+        info["as"]["info"] = ret['isp']
+    net_type = ret.get('net') or ret.get('type')
+    if net_type:
+        info["type"] = net_type
     return ret
 
 def get_ip_info(ip):
@@ -232,6 +244,10 @@ def query():
             print("\n")
             
 app = FastAPI()
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
 
 @app.get("/")
 async def api(request: Request, ip: str = None):
