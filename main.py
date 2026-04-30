@@ -5,10 +5,22 @@ import datetime
 import logging
 import sys
 import os
+import argparse
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request, HTTPException
 
-LOG_FILE = os.path.join('/code', 'ip_query.log')
+LOG_FILE = os.getenv('LOG_FILE', os.path.join('/code', 'ip_query.log'))
+GEOIP_CITY_DB = os.getenv('GEOIP_CITY_DB', 'GeoLite2-City.mmdb')
+GEOIP_ASN_DB = os.getenv('GEOIP_ASN_DB', 'GeoLite2-ASN.mmdb')
+GEOIP_CN_DB = os.getenv('GEOIP_CN_DB', 'GeoCN.mmdb')
+
+def require_file(path, description):
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"{description} 不存在: {path}")
+
+def open_database(path, description):
+    require_file(path, description)
+    return maxminddb.open_database(path)
 
 try:
     formatter = logging.Formatter('%(message)s')
@@ -32,9 +44,13 @@ except Exception as e:
     print(f"日志初始化失败: {e}")
     sys.exit(1)
 
-city_reader = maxminddb.open_database('GeoLite2-City.mmdb')
-asn_reader = maxminddb.open_database('GeoLite2-ASN.mmdb')
-cn_reader = maxminddb.open_database('GeoCN.mmdb')
+try:
+    city_reader = open_database(GEOIP_CITY_DB, 'GeoLite2 城市数据库')
+    asn_reader = open_database(GEOIP_ASN_DB, 'GeoLite2 ASN 数据库')
+    cn_reader = open_database(GEOIP_CN_DB, 'GeoCN 数据库')
+except Exception as e:
+    print(f"数据库初始化失败: {e}")
+    sys.exit(1)
 lang = ["zh-CN", "en"]
 asn_map = {
     9812: "东方有线",
@@ -83,6 +99,14 @@ def get_country(d):
         return "中国" + r
     return r
 
+def normalize_ip(ip):
+    query_ip = ip.split(',')[0].strip()
+    try:
+        ipaddress.ip_address(query_ip)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="无效的IP地址")
+    return query_ip
+
 def province_match(s):
     arr = ['内蒙古', '黑龙江', '河北', '山西', '吉林', '辽宁', '江苏', '浙江', '安徽', '福建', '江西', '山东', '河南', '湖北', '湖南', '广东', '海南', '四川', '贵州', '云南', '陕西', '甘肃', '青海', '广西', '西藏', '宁夏', '新疆', '北京', '天津', '上海', '重庆']
     for i in arr:
@@ -104,6 +128,7 @@ def get_addr(ip, mask):
 def get_maxmind(ip: str):
     try:
         ret = {"ip": ip}
+        country_name = ''
         asn_info = asn_reader.get(ip)
         if asn_info:
             as_ = {"number": asn_info["autonomous_system_number"], "name": asn_info["autonomous_system_organization"]}
@@ -148,7 +173,9 @@ def get_maxmind(ip: str):
     except ValueError as e:
         return {"error": str(e)}
 
-def get_cn(ip: str, info={}):
+def get_cn(ip: str, info=None):
+    if info is None:
+        info = {}
     ret, prefix = cn_reader.get_with_prefix_len(ip)
     if not ret:
         return
@@ -182,12 +209,16 @@ def query():
                 print(f"ISP：\t", end=' ')
                 if "info" in info["as"]:
                     print(info["as"]["info"], end=' ')
-                else:
+                elif "name" in info["as"]:
                     print(info["as"]["name"], end=' ')
                 if "type" in info:
                     print(f"({info['type']})", end=' ')
-                print(f"ASN{info['as']['number']}", end=' ')
-                print(info['as']["name"])
+                if "number" in info["as"]:
+                    print(f"ASN{info['as']['number']}", end=' ')
+                if "name" in info["as"]:
+                    print(info['as']["name"])
+                else:
+                    print()
             if "registered_country" in info and ("country" not in info or info["country"]["code"] != info["registered_country"]["code"]):
                 print(f"注册地：\t{info['registered_country']['name']}")
             if "country" in info:
@@ -205,9 +236,7 @@ app = FastAPI()
 @app.get("/")
 async def api(request: Request, ip: str = None):
     client_ip = request.headers.get("x-forwarded-for") or request.headers.get("x-real-ip") or request.client.host
-    query_ip = ip.strip() if ip else client_ip
-    # Extract the first valid IP if multiple IPs are provided
-    query_ip = query_ip.split(',')[0].strip()
+    query_ip = normalize_ip(ip if ip else client_ip)
     result = get_ip_info(query_ip)
     log_data = {
         "时间": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -222,13 +251,7 @@ async def api(request: Request, ip: str = None):
 @app.get("/{ip}")
 async def path_api(request: Request, ip: str):
     client_ip = request.headers.get("x-forwarded-for") or request.headers.get("x-real-ip") or request.client.host
-    query_ip = ip.split(',')[0].strip()  # Extract the first valid IP
-
-    # 验证IP地址是否有效
-    try:
-        ipaddress.ip_address(query_ip)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="无效的IP地址")
+    query_ip = normalize_ip(ip)
 
     result = get_ip_info(query_ip)
     log_data = {
@@ -243,6 +266,14 @@ async def path_api(request: Request, ip: str):
 
 
 if __name__ == '__main__':
-    query()
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=7887, server_header=False, proxy_headers=True)
+    parser = argparse.ArgumentParser(description='GeoIP 查询服务')
+    parser.add_argument('mode', nargs='?', choices=['api', 'query'], default='api', help='运行模式: api 或 query')
+    parser.add_argument('--host', default='0.0.0.0', help='API 监听地址')
+    parser.add_argument('--port', type=int, default=7887, help='API 监听端口')
+    args = parser.parse_args()
+
+    if args.mode == 'query':
+        query()
+    else:
+        import uvicorn
+        uvicorn.run(app, host=args.host, port=args.port, server_header=False, proxy_headers=True)

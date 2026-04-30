@@ -1,15 +1,24 @@
 #!/bin/sh
 
+download_db() {
+    file="$1"
+    url="$2"
+    echo "Updating ${file}..."
+    curl --fail --show-error --silent --location -o "${file}" "${url}"
+}
+
+retry_later() {
+    echo "$1"
+    sleep 60
+}
+
 while true; do
     date
-    echo "Updating GeoLite2-City.mmdb..."
-    curl -L -o "GeoLite2-City.mmdb" "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" || { echo "Failed to update GeoLite2-City.mmdb"; continue; }
+    download_db "GeoLite2-City.mmdb" "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb" || { retry_later "Failed to update GeoLite2-City.mmdb"; continue; }
     
-    echo "Updating GeoLite2-ASN.mmdb..."
-    curl -L -o "GeoLite2-ASN.mmdb" "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb" || { echo "Failed to update GeoLite2-ASN.mmdb"; continue; }
+    download_db "GeoLite2-ASN.mmdb" "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb" || { retry_later "Failed to update GeoLite2-ASN.mmdb"; continue; }
     
-    echo "Updating GeoCN.mmdb..."
-    curl -L -o "GeoCN.mmdb" "http://github.com/ljxi/GeoCN/releases/download/Latest/GeoCN.mmdb" || { echo "Failed to update GeoCN.mmdb"; continue; }
+    download_db "GeoCN.mmdb" "https://github.com/ljxi/GeoCN/releases/download/Latest/GeoCN.mmdb" || { retry_later "Failed to update GeoCN.mmdb"; continue; }
 
     echo "Attempting to restart uvicorn..."
     pkill -f "uvicorn"
@@ -25,5 +34,5 @@ while true; do
         continue
     fi
 
-    sleep 86400
+    sleep 604800
 done
