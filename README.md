@@ -82,16 +82,16 @@ python main.py api --host 0.0.0.0 --port 7887
 
 #### 构建镜像
 
-`docker build -t geoip-api .`
+`docker build -t ipscope .`
 
 #### 运行容器
 
-`docker run -d --name geoip-api -p 7887:7887 geoip-api`
+`docker run -d --name ipscope -p 7887:7887 ipscope`
 
 ---
 
 ### 在线拉取
 
-`docker pull ghcr.io/pseuo/geoip:main`
+`docker pull ghcr.io/pseuo/ipscope`
 
-`docker run --name geoip -d -p 7887:7887 ghcr.io/pseuo/geoip`
+`docker run --name ipscope -d -p 7887:7887 ghcr.io/pseuo/ipscope`
